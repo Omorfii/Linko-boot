@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -25,11 +26,18 @@ func main() {
 
 func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir string) int {
 
-	logger, err := initializeLogger()
+	logger, closeFunc, err := initializeLogger()
 	if err != nil {
-		logger.Fatalf("failed to open log file: %v", err)
+		fmt.Fprintf(os.Stderr, "failed to initialize logger: %v\n", err)
 		return 1
 	}
+
+	defer func() {
+		err := closeFunc()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to close the buffered file: %v\n", err)
+		}
+	}()
 
 	st, err := store.New(dataDir, logger)
 	if err != nil {
