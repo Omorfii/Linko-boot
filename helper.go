@@ -4,13 +4,13 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 )
 
 type closeFunc func() error
 
-func initializeLogger() (*log.Logger, closeFunc, error) {
+func initializeLogger() (*slog.Logger, closeFunc, error) {
 	logfile := os.Getenv("LINKO_LOG_FILE")
 
 	if logfile != "" {
@@ -20,7 +20,7 @@ func initializeLogger() (*log.Logger, closeFunc, error) {
 		}
 		buffered := bufio.NewWriterSize(file, 8192)
 		multiWriter := io.MultiWriter(os.Stderr, buffered)
-		logger := log.New(multiWriter, "", log.LstdFlags)
+		logger := slog.New(slog.NewTextHandler(multiWriter, nil))
 
 		closing := func() error {
 			err := buffered.Flush()
@@ -32,7 +32,7 @@ func initializeLogger() (*log.Logger, closeFunc, error) {
 		}
 		return logger, closing, nil
 	}
-	logger := log.New(os.Stderr, "", log.LstdFlags)
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	return logger, func() error { return nil }, nil
 
 }
