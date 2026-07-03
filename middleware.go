@@ -1,11 +1,18 @@
 package main
 
 import (
+	"context"
 	"io"
 	"log/slog"
 	"net/http"
 	"time"
 )
+
+const logContextKey contextKey = "log_context"
+
+type logContext struct {
+	Username string
+}
 
 type spyReadCloser struct {
 	io.ReadCloser
@@ -45,9 +52,13 @@ func requestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 			spyReader := &spyReadCloser{ReadCloser: r.Body}
 			r.Body = spyReader
 			spyWriter := &spyResponseWriter{ResponseWriter: w}
+			user := &logContext{}
+			r = r.WithContext(context.WithValue(r.Context(), logContextKey, user))
 			next.ServeHTTP(spyWriter, r)
 
-			logger.Info("Served request",
+			var attrs []any
+
+			attrs = append(attrs,
 				"method", r.Method,
 				"path", r.URL.Path,
 				"client_ip", r.RemoteAddr,
@@ -55,6 +66,13 @@ func requestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 				slog.Int("request_body_bytes", spyReader.bytesRead),
 				slog.Int("response_status", spyWriter.statusCode),
 				slog.Int("response_body_bytes", spyWriter.bytesWritten),
+			)
+			if user.Username != "" {
+				attrs = append(attrs, "user", user.Username)
+			}
+
+			logger.Info("Served request",
+				attrs...,
 			)
 		})
 	}
