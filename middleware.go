@@ -12,6 +12,7 @@ const logContextKey contextKey = "log_context"
 
 type logContext struct {
 	Username string
+	Error    error
 }
 
 type spyReadCloser struct {
@@ -52,23 +53,26 @@ func requestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 			spyReader := &spyReadCloser{ReadCloser: r.Body}
 			r.Body = spyReader
 			spyWriter := &spyResponseWriter{ResponseWriter: w}
-			user := &logContext{}
-			r = r.WithContext(context.WithValue(r.Context(), logContextKey, user))
+			logCtx := &logContext{}
+			r = r.WithContext(context.WithValue(r.Context(), logContextKey, logCtx))
 			next.ServeHTTP(spyWriter, r)
 
 			var attrs []any
 
 			attrs = append(attrs,
-				"method", r.Method,
-				"path", r.URL.Path,
-				"client_ip", r.RemoteAddr,
+				slog.String("method", r.Method),
+				slog.String("path", r.URL.Path),
+				slog.String("client_ip", r.RemoteAddr),
 				slog.Duration("duration", time.Since(start)),
 				slog.Int("request_body_bytes", spyReader.bytesRead),
 				slog.Int("response_status", spyWriter.statusCode),
 				slog.Int("response_body_bytes", spyWriter.bytesWritten),
 			)
-			if user.Username != "" {
-				attrs = append(attrs, "user", user.Username)
+			if logCtx.Username != "" {
+				attrs = append(attrs, slog.String("user", logCtx.Username))
+			}
+			if logCtx.Error != nil {
+				attrs = append(attrs, slog.Any("error", logCtx.Error))
 			}
 
 			logger.Info("Served request",

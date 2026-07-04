@@ -2,9 +2,11 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 
 	"boot.dev/linko/internal/linkoerr"
@@ -100,4 +102,11 @@ func replaceAttr(groups []string, a slog.Attr) slog.Attr {
 		}
 	}
 	return a
+}
+
+func httpError(ctx context.Context, w http.ResponseWriter, status int, err error) {
+	if logCtx, ok := ctx.Value(logContextKey).(*logContext); ok {
+		logCtx.Error = err
+	}
+	http.Error(w, err.Error(), status)
 }
