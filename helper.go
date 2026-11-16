@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -10,7 +9,10 @@ import (
 	"os"
 
 	"boot.dev/linko/internal/linkoerr"
+	"github.com/lmittmann/tint"
+	"github.com/mattn/go-isatty"
 	pkger "github.com/pkg/errors"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 type closeFunc func() error
@@ -28,41 +30,42 @@ type multiError interface {
 func initializeLogger() (*slog.Logger, closeFunc, error) {
 	logfile := os.Getenv("LINKO_LOG_FILE")
 
-	debugHandler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-		Level:       slog.LevelDebug,
-		ReplaceAttr: replaceAttr,
-	})
+	handlers := []slog.Handler{
+		tint.NewTextHandler(os.Stderr, &tint.Options{
+			Level:       slog.LevelDebug,
+			ReplaceAttr: replaceAttr,
+			NoColor:     !(isatty.IsCygwinTerminal(os.Stderr.Fd()) || isatty.IsTerminal(os.Stderr.Fd())),
+		}),
+	}
 
 	if logfile != "" {
-		file, err := os.OpenFile(logfile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o644)
-		if err != nil {
-			return nil, nil, fmt.Errorf("couldnt open the logfile: %v", err)
+
+		logger := &lumberjack.Logger{
+			Filename:   logfile,
+			MaxSize:    1,
+			MaxAge:     28,
+			MaxBackups: 10,
+			LocalTime:  false,
+			Compress:   true,
 		}
-		buffered := bufio.NewWriterSize(file, 8192)
-		infoHandler := slog.NewJSONHandler(buffered, &slog.HandlerOptions{
+
+		handlers = append(handlers, slog.NewJSONHandler(logger, &slog.HandlerOptions{
 			Level:       slog.LevelInfo,
 			ReplaceAttr: replaceAttr,
-		})
+		}))
 
 		closing := func() error {
-			err := buffered.Flush()
+			err := logger.Close()
 			if err != nil {
 				return err
 			}
-			err = file.Close()
-			return err
+			return nil
 		}
 
-		logger := slog.New(slog.NewMultiHandler(
-			debugHandler,
-			infoHandler,
-		))
-
-		return logger, closing, nil
+		return slog.New(slog.NewMultiHandler(handlers...)), closing, nil
 	}
 
-	logger := slog.New(debugHandler)
-	return logger, func() error { return nil }, nil
+	return slog.New(slog.NewMultiHandler(handlers...)), func() error { return nil }, nil
 
 }
 
