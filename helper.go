@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
+	"strings"
 
 	"boot.dev/linko/internal/linkoerr"
 	"github.com/lmittmann/tint"
@@ -111,5 +113,29 @@ func httpError(ctx context.Context, w http.ResponseWriter, status int, err error
 	if logCtx, ok := ctx.Value(logContextKey).(*logContext); ok {
 		logCtx.Error = err
 	}
-	http.Error(w, err.Error(), status)
+	if status == 401 || status == 403 || status == 500 {
+		http.Error(w, http.StatusText(status), status)
+	} else {
+		http.Error(w, err.Error(), status)
+	}
+}
+
+func redactIP(address string) string {
+
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return address
+	}
+	ip := net.ParseIP(host)
+
+	ip = ip.To4()
+	if ip == nil {
+		return address
+	}
+
+	ipslice := strings.Split(ip.String(), ".")
+	ipslice[len(ipslice)-1] = "x"
+	ipstring := strings.Join(ipslice, ".")
+
+	return ipstring
 }

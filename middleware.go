@@ -57,6 +57,7 @@ func requestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 			logCtx := &logContext{}
 			r = r.WithContext(context.WithValue(r.Context(), logContextKey, logCtx))
 			next.ServeHTTP(spyWriter, r)
+			ip := redactIP(r.RemoteAddr)
 
 			var attrs []any
 
@@ -64,7 +65,7 @@ func requestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 				slog.String("request_id", r.Header.Get("X-Request-ID")),
 				slog.String("method", r.Method),
 				slog.String("path", r.URL.Path),
-				slog.String("client_ip", r.RemoteAddr),
+				slog.String("client_ip", ip),
 				slog.Duration("duration", time.Since(start)),
 				slog.Int("request_body_bytes", spyReader.bytesRead),
 				slog.Int("response_status", spyWriter.statusCode),
