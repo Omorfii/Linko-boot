@@ -7,7 +7,9 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
+	"slices"
 	"strings"
 
 	"boot.dev/linko/internal/linkoerr"
@@ -72,6 +74,20 @@ func initializeLogger() (*slog.Logger, closeFunc, error) {
 }
 
 func replaceAttr(groups []string, a slog.Attr) slog.Attr {
+
+	var sensitiveKeys = []string{"password", "key", "apikey", "secret", "pin", "creditcardno", "user"}
+
+	if slices.Contains(sensitiveKeys, a.Key) {
+		return slog.String(a.Key, "[REDACTED]")
+	}
+
+	if userUrl, err := url.Parse(a.Value.String()); err == nil {
+		if _, ok := userUrl.User.Password(); ok {
+			userUrl.User = url.UserPassword(userUrl.User.Username(), "REDACTED")
+			return slog.String(a.Key, userUrl.String())
+		}
+	}
+
 	if a.Key == "error" {
 		err, ok := a.Value.Any().(error)
 		if !ok {
